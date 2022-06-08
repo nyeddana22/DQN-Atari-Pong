@@ -12,8 +12,8 @@ import torch.optim as optim
 import torch.autograd as autograd 
 import torch.nn.functional as F
 USE_CUDA = torch.cuda.is_available()
-from dqn import QLearner, compute_td_loss, ReplayBuffer
-# from dqn import QLearner, compute_td_loss, PrioritizedReplayBuffer
+# from dqn import QLearner, compute_td_loss, ReplayBuffer
+from dqn import QLearner, compute_td_loss, PrioritizedReplayBuffer
 
 env_id = "PongNoFrameskip-v4"
 env = make_atari(env_id)
@@ -26,8 +26,8 @@ gamma = 0.99
 record_idx = 10000
 
 replay_initial = 10000
-replay_buffer = ReplayBuffer(100000)
-# replay_buffer = PrioritizedReplayBuffer(100000)
+# replay_buffer = ReplayBuffer(100000)
+replay_buffer = PrioritizedReplayBuffer(100000)
 
 model = QLearner(env, num_frames, batch_size, gamma, replay_buffer)
 model.load_state_dict(torch.load("model_pretrained.pth", map_location='cpu'))
@@ -47,10 +47,10 @@ epsilon_final = 0.01
 epsilon_decay = 50000
 epsilon_by_frame = lambda frame_idx: epsilon_final + (epsilon_start - epsilon_final) * math.exp(-1. * frame_idx / epsilon_decay)
 
-# #Beta calculation for PER
-# beta_frames = 100000
-# beta_start = 0.4
-# beta_by_frame = lambda frame_idx: min(1.0, beta_start + frame_idx * (1.0 - beta_start) / beta_frames)
+#Beta calculation for PER
+beta_frames = 100000
+beta_start = 0.4
+beta_by_frame = lambda frame_idx: min(1.0, beta_start + frame_idx * (1.0 - beta_start) / beta_frames)
 
 
 losses = []
@@ -81,10 +81,10 @@ for frame_idx in range(1, num_frames + 1):
         episode_reward = 0
 
     if len(replay_buffer) > replay_initial:
-        # #PER Code
-        # beta = beta_by_frame(frame_idx)
-        # loss = compute_td_loss(model, target_model, batch_size, gamma, replay_buffer, beta)
-        loss = compute_td_loss(model, target_model, batch_size, gamma, replay_buffer)
+        #PER Code
+        beta = beta_by_frame(frame_idx)
+        loss = compute_td_loss(model, target_model, batch_size, gamma, replay_buffer, beta)
+#         loss = compute_td_loss(model, target_model, batch_size, gamma, replay_buffer)
         loss = loss.mean()
         optimizer.zero_grad()
         loss.backward()
@@ -101,7 +101,7 @@ for frame_idx in range(1, num_frames + 1):
         print('#Frame: %d, Loss: %f' % (frame_idx, mloss))
         print('Last-10 average reward: %f' % mreward)
         print('Epsilon Value: %f' % epsilon)
-        # print('Beta Value: %f' % beta)
+        print('Beta Value: %f' % beta)
 
         frames_plt.append(frame_idx)
         mean_losses_plt.append(mloss)
