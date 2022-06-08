@@ -21,60 +21,40 @@ class QLearner(nn.Module):
         self.env = env
         self.input_shape = self.env.observation_space.shape
         self.num_actions = self.env.action_space.n
-        self.features = nn.Sequential(
+
+    #Dueling DQN Architecture Implementation
+
+        self.conv_nn = nn.Sequential(
             nn.Conv2d(self.input_shape[0], 32, kernel_size=8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU()
+			nn.BatchNorm2d(32),
+			nn.ReLU(),
+			nn.Conv2d(32, 64, kernel_size=4, stride=2),
+			nn.BatchNorm2d(64),
+			nn.ReLU(),
+			nn.Conv2d(64, 64, kernel_size=3, stride=1),
+			nn.BatchNorm2d(64),
+			nn.ReLU() 
         )
-        self.fc = nn.Sequential(
-            nn.Linear(self.feature_size(), 512),
-            nn.ReLU(),
-            nn.Linear(512, self.num_actions)
-        )
-
-    # #Dueling DQN Architecture Implementation
-
-    #     self.conv_nn = nn.Sequential(
-    #         nn.Conv2d(self.input_shape[0], 32, kernel_size=8, stride=4),
-	# 		nn.BatchNorm2d(32),
-	# 		nn.ReLU(),
-	# 		nn.Conv2d(32, 64, kernel_size=4, stride=2),
-	# 		nn.BatchNorm2d(64),
-	# 		nn.ReLU(),
-	# 		nn.Conv2d(64, 64, kernel_size=3, stride=1),
-	# 		nn.BatchNorm2d(64),
-	# 		nn.ReLU() 
-    #     )
-    #     cnn_output_shape = self.conv_nn(torch.zeros(1, *self.input_shape))
-    #     cnn_output_shape = int(np.prod(cnn_output_shape.size()))
+        cnn_output_shape = self.conv_nn(torch.zeros(1, *self.input_shape))
+        cnn_output_shape = int(np.prod(cnn_output_shape.size()))
         
-    #     self.linear_actions = nn.Sequential(
-	# 		nn.Linear(cnn_output_shape, 512),
-	# 		nn.ReLU(),
-	# 		nn.Linear(512, self.num_actions)
-    #     )
-    #     self.linear_value = nn.Sequential(
-	# 		nn.Linear(cnn_output_shape, 512),
-	# 		nn.ReLU(),
-	# 		nn.Linear(512, 1)
-    #     )
-
-    # def forward(self, x):
-    #     batch_size = x.size()[0]
-    #     cnn_output = self.conv_nn(x).view(batch_size, -1)
-    #     value = self.linear_value(cnn_output)
-    #     actions = self.linear_actions(cnn_output)
-    #     return value + actions  - torch.mean(actions, dim=1, keepdim=True)
+        self.linear_actions = nn.Sequential(
+			nn.Linear(cnn_output_shape, 512),
+			nn.ReLU(),
+			nn.Linear(512, self.num_actions)
+        )
+        self.linear_value = nn.Sequential(
+			nn.Linear(cnn_output_shape, 512),
+			nn.ReLU(),
+			nn.Linear(512, 1)
+        )
 
     def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
-        
+        batch_size = x.size()[0]
+        cnn_output = self.conv_nn(x).view(batch_size, -1)
+        value = self.linear_value(cnn_output)
+        actions = self.linear_actions(cnn_output)
+        return value + actions  - torch.mean(actions, dim=1, keepdim=True)
 
     def feature_size(self):
             return self.features(autograd.Variable(torch.zeros(1, *self.input_shape))).view(1, -1).size(1)
@@ -112,10 +92,6 @@ def compute_td_loss(model, target_model, batch_size, gamma, replay_buffer):
     expected_qval = reward + gamma * next_qval * (1 - done)
     loss = torch.nn.functional.mse_loss(expected_qval,curr_qval)
 
-    # #MSE Loss calculation for PER 
-    # loss  = (curr_qval - expected_qval.detach()).pow(2) * weights
-    # prios = loss + 1e-5
-    # replay_buffer.update_priorities(sample_indices, prios.data.cpu().numpy())
     return loss
 
 class ReplayBuffer(object):
@@ -147,67 +123,3 @@ class ReplayBuffer(object):
         
     def __len__(self):
         return len(self.buffer)
-
-# # Prioritized Experience Replay buffer class
-# class PrioritizedReplayBuffer(object):
-#     def __init__(self, capacity, alpha = 0.6):
-#         self.capacity = capacity
-#         self.buffer = deque(maxlen=capacity)
-
-#         #PER
-#         self.alpha = alpha
-#         self.position = 0
-#         self.priorities = np.zeros((capacity,), dtype=np.float32)
-
-#     def push(self, state, action, reward, next_state, done):
-#         state = np.expand_dims(state, 0)
-#         next_state = np.expand_dims(next_state, 0)
-#         max_prio = self.priorities.max() if self.buffer else 1.0
-
-#         if len(self.buffer) < self.capacity:
-#             self.buffer.append((state, action, reward, next_state, done))
-#         else:
-#             self.buffer[self.position] = (state, action, reward, next_state, done)
-
-#         self.priorities[self.position] = max_prio
-#         self.position = (self.position + 1) % self.capacity
-
-#     def sample(self, batch_size, beta=0.4):
-#         # TODO: Randomly sampling data with specific batch size from the buffer
-
-#         if len(self.buffer) == self.capacity:
-#             prios = self.priorities
-#         else:
-#             prios = self.priorities[:self.position]
-    
-#         probs = prios ** self.alpha
-#         probs /= probs.sum()
-#         total = len(self.buffer)
-#         sample_indices = np.random.choice(len(self.buffer),batch_size, p=probs)
-
-#         weights = (total * probs[sample_indices]) ** (-beta)
-#         weights /= weights.max()
-#         weights = np.array(weights, dtype=np.float32)
-
-#         state = []
-#         action = []
-#         reward = []
-#         next_state = []
-#         done = []
-#         for i in sample_indices:
-#           state.append(self.buffer[i][0])
-#           action.append(self.buffer[i][1])
-#           reward.append(self.buffer[i][2])
-#           next_state.append(self.buffer[i][3])
-#           done.append(self.buffer[i][4])
-
-#         return state, action, reward, next_state, done, sample_indices, weights
-#         # return None # just for testing random agent
-#         #return state, action, reward, next_state, done
-
-#     def update_priorities(self, batch_indices, batch_priorities):
-#         for idx, prio in zip(batch_indices, batch_priorities):
-#             self.priorities[idx] = prio
-
-#     def __len__(self):
-#         return len(self.buffer)
