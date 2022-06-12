@@ -1,4 +1,6 @@
 import sys
+
+#command to test the model
 pthname_lst = [x for x in sys.argv if x.endswith(".pth")]
 if(len(sys.argv) < 2 or len(pthname_lst) != 1):
     print("python3 test_dqn_pong.py model.pth [-g]")
@@ -26,8 +28,10 @@ from dqn import QLearner, compute_td_loss, ReplayBuffer
 from pyvirtualdisplay import Display
 from gym import wrappers
 
+#enable game play display
 virtual_display = Display(visible=0,size=(1400,900))
 virtual_display.start()
+#load the Pong environment
 env_id = "PongNoFrameskip-v4"
 env = make_atari(env_id)
 env = wrap_deepmind(env)
@@ -47,8 +51,10 @@ if USE_CUDA:
     model = model.cuda()
     print("Using cuda")
 
+#load the model
 model.load_state_dict(torch.load(pthname,map_location='cpu'))
 
+#can modify seeds to change initial states
 env.seed(1)
 state = env.reset()
 done = False
@@ -58,11 +64,14 @@ games_won = 0
 while not done:
     if use_gui:
         env.render()
-
+    
+    #obtain action from act function
     action = model.act(state, 0)
-
+    
+    #obtain corresponding reward and state
     state, reward, done, _ = env.step(action)
     
+    #keep track of wins based on reward function
     if reward != 0:
         print(reward)
     if reward == 1:
