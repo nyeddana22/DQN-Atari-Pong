@@ -35,11 +35,11 @@ class QLearner(nn.Module):
             nn.Linear(512, self.num_actions)
         )
 
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc(x)
-        return x
+    def forward(self, state):
+        state = self.features(state)
+        state = state.view(state.size(0), -1)
+        qtable = self.fc(state)
+        return qtable
         
 
     def feature_size(self):
